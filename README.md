@@ -2,7 +2,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-BYD%20DiLink%205.0-blue.svg?style=for-the-badge&logo=android)](https://github.com/EngMohamedKhamis/BYD-AEB-Manager)
 [![Requirement](https://img.shields.io/badge/Requirement-ADB%20Enabled-orange.svg?style=for-the-badge&logo=powershell)](https://github.com/EngMohamedKhamis/BYD-AEB-Manager)
-[![Download APK](https://img.shields.io/badge/Download-AEB__Manager__v2.0.apk-success.svg?style=for-the-badge&logo=android)](https://github.com/EngMohamedKhamis/BYD-AEB-Manager/releases/download/v2.0/AEB_Manager_v2.0.apk)
+[![Download Latest APK](https://img.shields.io/badge/Download-Latest%20APK-success.svg?style=for-the-badge&logo=android)](https://github.com/EngMohamedKhamis/BYD-AEB-Manager/releases/latest/download/AEB_Manager.apk)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg?style=for-the-badge)](LICENSE)
 
 > A lightweight background utility for BYD DiLink infotainment systems that automatically remembers and restores your preferred Automatic Emergency Braking (AEB) setting across driving cycles.
@@ -39,7 +39,9 @@ On many BYD vehicles running DiLink 5.0, the infotainment system resets specific
 ## 🚀 Quick Start
 
 ### 1. Download & Install
-Download [**`AEB_Manager_v2.0.apk`**](https://github.com/EngMohamedKhamis/BYD-AEB-Manager/releases/download/v2.0/AEB_Manager_v2.0.apk) *(Direct APK Download, 164 KB)* and install it on your DiLink screen.
+Download the [**Latest AEB Manager APK**](https://github.com/EngMohamedKhamis/BYD-AEB-Manager/releases/latest/download/AEB_Manager.apk) *(Direct Download)* and install it on your DiLink screen.
+
+*(You can also browse all versioned releases on the [Releases](https://github.com/EngMohamedKhamis/BYD-AEB-Manager/releases) page).*
 
 ### 2. Verify ADB
 Ensure **ADB** is enabled on your DiLink head unit (via Developer Options or engineering menu).

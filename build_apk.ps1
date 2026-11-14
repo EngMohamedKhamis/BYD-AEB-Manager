@@ -29,5 +29,6 @@ cmd.exe /c "gradlew.bat assembleAggressiveRelease"
 if (Test-Path "app\build\outputs\apk\aggressiveRelease\app-aggressiveRelease.apk") {
     Write-Host "Exporting AEB Manager APK..."
     Copy-Item "app\build\outputs\apk\aggressiveRelease\app-aggressiveRelease.apk" "AEB_Manager_v2.0.apk" -Force
-    Write-Host "Done! AEB_Manager_v2.0.apk exported successfully." -ForegroundColor Green
+    Copy-Item "app\build\outputs\apk\aggressiveRelease\app-aggressiveRelease.apk" "AEB_Manager.apk" -Force
+    Write-Host "Done! AEB_Manager.apk exported successfully." -ForegroundColor Green
 }
