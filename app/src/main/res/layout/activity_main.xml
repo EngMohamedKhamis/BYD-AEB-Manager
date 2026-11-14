@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="20dp"
+    android:paddingBottom="88dp"
+    android:background="@drawable/main_bg">
+
+    <!-- Internal Title Header -->
+    <TextView
+        android:id="@+id/app_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_header"
+        android:textColor="#E2E8F0"
+        android:textSize="24sp"
+        android:letterSpacing="0.05"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp"
+        android:layout_alignParentTop="true" />
+
+    <!-- Version Footer -->
+    <TextView
+        android:id="@+id/v_footer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:text="@string/footer_text"
+        android:textColor="#33FFFFFF"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/disclaimer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/v_footer"
+        android:layout_centerHorizontal="true"
+        android:gravity="center"
+        android:text="This application is designed to disable the AEB feature based on driver judgment. Use at own risk."
+        android:textColor="#66FFFFFF"
+        android:textSize="10sp"
+        android:textStyle="italic"
+        android:layout_marginBottom="8dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/disclaimer"
+        android:layout_below="@id/app_title"
+        android:orientation="vertical"
+        android:layout_marginBottom="8dp">
+
+        <!-- ROW 1: Hero Status & Actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1.2"
+            android:background="@drawable/card_glass_bg"
+            android:orientation="horizontal"
+            android:padding="20dp"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <View
+                android:id="@+id/status_dot"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:background="@drawable/status_orb_gray"
+                android:layout_marginEnd="24dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center_vertical">
+                <TextView
+                    android:id="@+id/status_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="INITIALIZING"
+                    android:textColor="#F8FAFC"
+                    android:textSize="20sp"
+                    android:letterSpacing="0.02"
+                    android:textStyle="bold"
+                    android:includeFontPadding="false" />
+                <TextView
+                    android:id="@+id/status_subtext"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Connecting to system..."
+                    android:textColor="#94A3B8"
+                    android:textSize="15sp"
+                    android:layout_marginTop="4dp"
+                    android:includeFontPadding="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                
+                <Button
+                    android:id="@+id/btn_grant_permissions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="64dp"
+                    android:text="Grant Permission"
+                    android:background="@drawable/dashboard_btn_blue"
+                    android:textColor="#FFFFFF"
+                    android:paddingHorizontal="24dp"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="12dp" />
+
+                <Button
+                    android:id="@+id/btn_disable_now"
+                    android:layout_width="wrap_content"
+                    android:layout_height="64dp"
+                    android:text="Disable AEB Now"
+                    android:background="@drawable/dashboard_btn_green"
+                    android:textColor="#FFFFFF"
+                    android:paddingHorizontal="24dp"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ROW 2: Control Toggles -->
+        <LinearLayout
+            android:id="@+id/row_toggles"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1.0"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+                android:background="@drawable/card_glass_bg" android:layout_marginEnd="8dp"
+                android:gravity="center" android:orientation="vertical"
+                android:clickable="true" android:focusable="true"
+                android:onClick="onCardClick"
+                android:padding="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Auto-Start" android:textColor="#E2E8F0" android:textSize="16sp" android:textStyle="bold" />
+                <CheckBox android:id="@+id/cb_boot"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:scaleX="1.8" android:scaleY="1.8"
+                    android:buttonTint="#22C55E" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+                android:background="@drawable/card_glass_bg" android:layout_marginStart="8dp"
+                android:gravity="center" android:orientation="vertical"
+                android:clickable="true" android:focusable="true"
+                android:onClick="onCardClick"
+                android:padding="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Floating HUD" android:textColor="#E2E8F0" android:textSize="16sp" android:textStyle="bold" />
+                <CheckBox android:id="@+id/cb_floating"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:scaleX="1.8" android:scaleY="1.8"
+                    android:buttonTint="#22C55E" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ROW 3: Protection Mode -->
+        <LinearLayout
+            android:id="@+id/row_protection"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1.2"
+            android:background="@drawable/card_glass_bg"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PROTECTION MODE" android:textColor="#94A3B8" android:textSize="18sp" android:textStyle="bold" android:letterSpacing="0.05" android:layout_marginBottom="10dp" />
+            
+            <RadioGroup android:id="@+id/rg_protection" android:layout_width="match_parent" android:layout_height="64dp" android:orientation="horizontal">
+                <RadioButton android:id="@+id/rb_no_action" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+                    android:button="@null" android:background="@drawable/segmented_pill_bg" android:gravity="center"
+                    android:paddingHorizontal="8dp" android:text="No Action"
+                    android:textColor="#FFFFFF" android:textSize="16sp" android:textStyle="bold" android:layout_marginEnd="6dp" />
+
+                <RadioButton android:id="@+id/rb_once_on_start" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+                    android:button="@null" android:background="@drawable/segmented_pill_bg" android:gravity="center"
+                    android:paddingHorizontal="8dp" android:text="Once on Start"
+                    android:textColor="#FFFFFF" android:textSize="16sp" android:textStyle="bold" android:layout_marginHorizontal="3dp" />
+
+                <RadioButton android:id="@+id/rb_auto_disable" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+                    android:button="@null" android:background="@drawable/segmented_pill_bg" android:gravity="center"
+                    android:paddingHorizontal="8dp" android:text="Auto Disable"
+                    android:textColor="#FFFFFF" android:textSize="16sp" android:textStyle="bold" android:layout_marginStart="6dp" />
+            </RadioGroup>
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <View android:id="@+id/et_delay" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
+
+</RelativeLayout>

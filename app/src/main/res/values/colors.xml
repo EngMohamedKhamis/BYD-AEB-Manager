@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#0F172A</color>
+
+    <!-- Status colours (screen) -->
+    <color name="status_off">#FF4CAF50</color>
+    <color name="status_on">#FFEF4444</color>
+    <color name="status_neutral">#FF94A3B8</color>
+    <color name="status_attention">#FFF59E0B</color>
+    <color name="status_error">#FFEF4444</color>
+    <color name="button_disabled">#FF475569</color>
+    <color name="grant_active">#FF2563EB</color>
+    <color name="grant_idle">#FF475569</color>
+    <color name="pill_no_action">#FF475569</color>
+
+    <!-- Status colours (floating HUD) -->
+    <color name="hud_off">#FF22C55E</color>
+    <color name="hud_on">#FFEF4444</color>
+    <color name="hud_neutral">#FF94A3B8</color>
+    <color name="hud_attention">#FFF59E0B</color>
+</resources>

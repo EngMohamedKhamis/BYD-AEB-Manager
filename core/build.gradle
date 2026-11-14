@@ -1,0 +1,34 @@
+// :core - the pure-Java part of the app (no Android classes can be imported here, by construction).
+// It holds logic that must be testable without a car or a phone: the engine, the parsers, the ADB framing.
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 8
+    options.compilerArgs << '-Xlint:all'
+}
+
+// No JUnit (no new dependency, works offline): the tests are plain classes run by RunAll.
+tasks.named('test') {
+    enabled = false
+}
+
+tasks.register('selfTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs the core self-test (RunAll). Fails the build on any failed check.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.byd.aebtoggle.core.RunAll'
+    workingDir = projectDir
+    systemProperty 'adbhelper.path', file('../app/src/main/java/com/byd/aebtoggle/AdbHelper.java').absolutePath
+}
+
+tasks.named('check') {
+    dependsOn 'selfTest'
+}

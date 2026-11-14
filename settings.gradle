@@ -1,0 +1,3 @@
+rootProject.name = "BYDAebToggle"
+include ':app'
+include ':core'

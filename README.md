@@ -1,42 +1,91 @@
-# BYD AEB Manager
+# 🚗 BYD AEB Manager
 
-A streamlined, reliable companion utility engineered for BYD DiLink infotainment systems to monitor, manage, and maintain Automatic Emergency Braking (AEB) configurations across ignition cycles.
+[![Platform](https://img.shields.io/badge/Platform-BYD%20DiLink%205.0-blue.svg?style=for-the-badge&logo=android)](https://github.com/EngMohamedKhamis/BYD-AEB-Manager)
+[![Requirement](https://img.shields.io/badge/Requirement-ADB%20Enabled-orange.svg?style=for-the-badge&logo=powershell)](https://github.com/EngMohamedKhamis/BYD-AEB-Manager)
+[![Release](https://img.shields.io/badge/Release-v2.0-success.svg?style=for-the-badge)](https://github.com/EngMohamedKhamis/BYD-AEB-Manager/releases)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg?style=for-the-badge)](LICENSE)
+
+> A lightweight background utility for BYD DiLink infotainment systems that automatically remembers and restores your preferred Automatic Emergency Braking (AEB) setting across driving cycles.
 
 ---
 
-## 📋 Overview
+## ⚡ Why This Exists
+On many BYD vehicles running DiLink 5.0, the infotainment system resets specific safety toggles back to default every time the vehicle powers off. Finding and switching the toggle back requires digging through 3 to 4 nested menu layers on every trip.
 
-**BYD AEB Manager** is an open automotive utility designed specifically for BYD vehicle owners and enthusiasts running DiLink 3.0 / 4.0 / 5.0 systems. It provides a clean, automotive-optimized interface to manage AEB state preferences without requiring repeated manual adjustments every time the vehicle starts.
+**BYD AEB Manager** runs quietly in the background on your DiLink screen, remembers your toggle preference, and automatically applies it when the car boots up—saving you time and menu taps every day.
 
-## ✨ Key Features
+---
 
-- **🔄 State Persistence**: Maintains your chosen AEB operating state reliably across ignition and power cycles.
-- **🛡️ Background Watchdog Guard**: Monitors service integrity to prevent accidental terminations by aggressive background task managers.
-- **🖥️ Automotive-Optimized UI**: High-contrast, touch-friendly UI layout tailored for high-resolution 12.8" and 15.6" DiLink touchscreens.
-- **⚡ Lightweight Footprint**: Ultra-low memory and CPU usage designed to run quietly in the background without affecting head-unit responsiveness.
-- **🔌 Zero-Touch Operation**: Streamlined initial setup with automated permission verification.
+## ✨ Features
 
-## 📱 Compatibility
+- 🔄 **Automatic State Restoration**: Automatically re-applies your preferred AEB toggle state on car power-on.
+- 🎛️ **Floating HUD Indicator**: An optional, minimal floating badge on the DiLink display shows current status at a glance.
+- 🔒 **100% Offline & Private**: Zero internet permissions, zero analytics, zero telemetry. All communication stays strictly on the vehicle's local loopback.
+- ⚡ **Lightweight & Efficient**: Sleeps when idle with virtually zero CPU and battery impact.
+- 🛡️ **Safe & Contained**: Designed exclusively to toggle the user-facing AEB switch without modifying system firmware or vehicle files.
 
-- **Supported Platform**: BYD DiLink Infotainment Systems (Android 8.0 through Android 12+)
-- **Screen Orientations**: Landscape & Portrait adaptive layouts
-- **Installation Method**: Sideload via USB flash drive or ADB
+---
 
-## 🚀 Getting Started
+## 📋 Requirements
 
-### Installation
-1. Obtain the latest compiled APK release (AEB_Manager_vX.X_COMMUNITY.apk).
-2. Sideload the APK onto your DiLink head unit (via USB file manager or ADB).
-3. Open **BYD AEB Manager** on your vehicle screen.
-4. Follow the on-screen prompts to grant required permissions.
-5. Set your preferred AEB operational behavior and watchdog intervals.
+| Requirement | Details |
+| :--- | :--- |
+| **System** | BYD DiLink 5.0 (Android 12) |
+| **Tested On** | BYD Song L EV (DiLink 5.0) |
+| **Condition** | **ADB Enabled** on DiLink |
 
-## ⚠️ Safety & Legal Disclaimer
+---
 
-> **IMPORTANT**: This utility is an independent community project and is **not** endorsed, sponsored, or affiliated with BYD Auto Co., Ltd.
-> 
-> Automatic Emergency Braking (AEB) is a critical active safety system. This software is provided for informational and convenience purposes only. The driver remains solely and fully responsible for safe operation of the vehicle and compliance with all applicable traffic and road safety regulations at all times. Use at your own risk.
+## 🚀 Quick Start
+
+### 1. Download & Install
+Download the latest `AEB_Manager_v2.0.apk` from the **[Releases](https://github.com/EngMohamedKhamis/BYD-AEB-Manager/releases)** section and install it on your DiLink screen.
+
+### 2. Verify ADB
+Ensure **ADB** is enabled on your DiLink head unit (via Developer Options or engineering menu).
+
+### 3. First Launch
+1. Open **AEB Manager**.
+2. Follow the on-screen prompts to grant **Accessibility** and **Display over other apps** (Overlay) permissions.
+3. Select your desired AEB toggle preference.
+4. The background service is now active and will manage the setting automatically on every drive.
+
+---
+
+## 🔍 How It Works
+
+- **Self-Generating Local Key**: On first launch, the app creates a secure RSA authentication key stored exclusively on your device to communicate with DiLink's local ADB interface.
+- **Boot & Sleep Detection**: The app monitors vehicle ignition/boot events, waits until DiLink's internal vehicle services are fully responsive, and toggles the switch once.
+- **Fail-Safe Operation**: If the system is busy or a command fails, it retries safely with back-off delays rather than spamming the bus.
+
+---
+
+## 🛠️ Building from Source
+
+To compile the APK yourself using Gradle:
+
+```bash
+# Clone the repository
+git clone https://github.com/EngMohamedKhamis/BYD-AEB-Manager.git
+cd BYD-AEB-Manager
+
+# Build release APK
+./gradlew assembleAggressiveRelease
+```
+
+The compiled APK will be output to:
+`app/build/outputs/apk/aggressiveRelease/app-aggressiveRelease.apk`
+
+---
+
+## ⚠️ Disclaimer
+
+This is an independent open-source hobbyist project and is **not** affiliated with, endorsed by, or associated with BYD Auto Co., Ltd. 
+
+Modifying driver assistance settings alters vehicle behavior. The driver remains solely responsible for operating the vehicle safely, observing road conditions, and adhering to local traffic laws at all times. Use at your own discretion.
+
+---
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
