@@ -24,12 +24,17 @@ public class BootReceiver extends BroadcastReceiver {
 
         Log.i("BYDAebToggle", "Confirmed Boot Broadcast: " + action);
         
-        boolean startOnBoot = new AebSettings(context).startOnBoot(); // Default to true
+        AebSettings settings = new AebSettings(context);
+        settings.setBootEnforceConsumed(false); // Reset Once-on-Start consumption on every new vehicle start
+        Log.i("BYDAebToggle", "Reset Once-on-Start consumed state for new vehicle ignition");
+
+        boolean startOnBoot = settings.startOnBoot(); // Default to true
         StateStore.event("boot broadcast " + action + ", auto-start " + (startOnBoot ? "on" : "off"));
         
         if (startOnBoot) {
             try {
                 Intent serviceIntent = new Intent(context, AebService.class);
+                serviceIntent.putExtra(AebService.EXTRA_IGNITION_CYCLE, true);
                 context.startForegroundService(serviceIntent); // minSdk 31
             } catch (Exception e) {
                 Log.e("BYDAebToggle", "Failed to start AebService on boot: " + e.getMessage());

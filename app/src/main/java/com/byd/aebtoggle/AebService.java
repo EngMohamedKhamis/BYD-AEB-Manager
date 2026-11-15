@@ -36,8 +36,10 @@ public class AebService extends Service {
 
     private static final String TAG = "AebService";
     private static final String CHANNEL_ID = "AebServiceChannel";
+    public static final String EXTRA_IGNITION_CYCLE = "is_ignition_cycle";
 
     private HandlerThread engineThread;
+    private Handler engineHandler;
     private Engine engine;
     private HudController hud;
 
@@ -63,17 +65,23 @@ public class AebService extends Service {
                 + Mode.label(new AebSettings(this).mode()) + ")");
         engineThread = new HandlerThread("AebEngine");
         engineThread.start();
-        Handler handler = new Handler(engineThread.getLooper());
-        engine = new Engine(new AdbVehicleLink(), new AndroidClock(), new HandlerScheduler(handler),
+        engineHandler = new Handler(engineThread.getLooper());
+        engine = new Engine(new AdbVehicleLink(), new AndroidClock(), new HandlerScheduler(engineHandler),
                 new AebSettings(this), StateStore::publish, new EngineLogAdapter(TAG));
-        StateStore.attach(engine, handler); // "Disable AEB Now" runs on this engine's thread
+        StateStore.attach(engine, engineHandler); // "Disable AEB Now" runs on this engine's thread
         // H04: every state transition runs on the single engine thread, including the first one.
-        handler.post(engine::start);
+        engineHandler.post(engine::start);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(1, createNotification());
+        if (intent != null && intent.getBooleanExtra(EXTRA_IGNITION_CYCLE, false)) {
+            new AebSettings(this).setBootEnforceConsumed(false);
+            if (engine != null && engineHandler != null) {
+                engineHandler.post(engine::onIgnitionCycle);
+            }
+        }
         boolean showFloating = new AebSettings(this).showFloating();
         boolean hasOverlayPermission = android.provider.Settings.canDrawOverlays(this);
 

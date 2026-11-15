@@ -143,6 +143,15 @@ public final class Engine {
         }
     }
 
+    /** Called on vehicle boot/ignition broadcast to start fresh for the new trip. */
+    public void onIgnitionCycle() {
+        if (destroyed) return;
+        log.d("IGNITION CYCLE: resetting Once-on-Start state and restarting discovery");
+        settings.setBootEnforceConsumed(false);
+        steadyOnCount = 0;
+        transitionTo(State.CONNECTING);
+    }
+
     /** Latest published snapshot. Any thread. */
     public Snapshot snapshot() {
         return current;
@@ -377,7 +386,6 @@ public final class Engine {
                 boolean consumed = settings.isBootEnforceConsumed();
                 if (mode == Mode.AUTO_DISABLE || (mode == Mode.ONCE_ON_START && !consumed)) {
                     log.d("DISCOVERING: AEB ON + mode=" + mode + " -> ENFORCING_BOOT_EARLY");
-                    if (mode == Mode.ONCE_ON_START) settings.setBootEnforceConsumed(true); // H05: consume before dispatch
                     enforceRetries = 0;
                     transitionTo(State.ENFORCING_BOOT_EARLY);
                 } else {
@@ -386,6 +394,9 @@ public final class Engine {
                 }
             } else {
                 log.d("DISCOVERING: stable, AEB=OFF -> STEADY");
+                if (mode == Mode.ONCE_ON_START) {
+                    settings.setBootEnforceConsumed(true);
+                }
                 transitionTo(State.STEADY);
             }
         }
@@ -400,6 +411,7 @@ public final class Engine {
             int mode = settings.mode();
             if (mode != Mode.ONCE_ON_START && mode != Mode.AUTO_DISABLE) {
                 log.w("ENFORCING_BOOT_EARLY: mode is now " + mode + " - write cancelled");
+                if (settings.mode() == Mode.ONCE_ON_START) settings.setBootEnforceConsumed(true);
                 transitionTo(State.STEADY);
                 return;
             }
@@ -421,6 +433,9 @@ public final class Engine {
     private void scheduleVerifyBoot() {
         if (verifyStepIndex >= BOOT_VERIFY_DELAYS_MS.length) {
             log.d("VERIFYING_BOOT: all checks passed -> BACKOFF_SETTLING");
+            if (settings.mode() == Mode.ONCE_ON_START) {
+                settings.setBootEnforceConsumed(true);
+            }
             transitionTo(State.BACKOFF_SETTLING);
             return;
         }
@@ -455,6 +470,7 @@ public final class Engine {
                     transitionTo(State.ENFORCING_BOOT_EARLY);
                 } else {
                     log.w("VERIFYING_BOOT: retries exhausted -> DEGRADED_RECOVERY");
+                    if (settings.mode() == Mode.ONCE_ON_START) settings.setBootEnforceConsumed(true);
                     transitionTo(State.DEGRADED_RECOVERY);
                 }
             }
@@ -529,6 +545,9 @@ public final class Engine {
     private void scheduleVerifyRuntime() {
         if (verifyStepIndex >= RUNTIME_VERIFY_DELAYS_MS.length) {
             log.d("VERIFYING_RUNTIME: all checks passed -> STEADY");
+            if (settings.mode() == Mode.ONCE_ON_START) {
+                settings.setBootEnforceConsumed(true);
+            }
             transitionTo(State.STEADY);
             return;
         }
