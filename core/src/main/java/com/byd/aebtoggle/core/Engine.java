@@ -50,6 +50,8 @@ public final class Engine {
     private static final int STEADY_HEALTHY_RESET_READS = 6;
     private static final int MAX_WRITE_FAILURES = 3;
     private static final long[] AUTH_FAIL_BACKOFF_MS = {3000, 15_000, 60_000, 300_000};
+    /** Duplicate boot/ignition signals arriving within this window of an active boot session are ignored. */
+    public static final long DUPLICATE_IGNITION_WINDOW_MS = 30_000;
 
     private final VehicleLink link;
     private final Clock clock;
@@ -78,6 +80,7 @@ public final class Engine {
     private int authFailCount = 0;
     private long nextConnectDelayMs = 0;
     private long nextTickDelayMs = 0;
+    private long lastIgnitionMs = -1;
 
     // ---- the published view (written under publishLock) ----
     private Aeb aeb = Aeb.UNKNOWN;
@@ -102,6 +105,23 @@ public final class Engine {
 
     /** Begins at CONNECTING. Call on the engine thread (old code: scheduler.execute in onCreate). */
     public void start() {
+        if (destroyed) return;
+        if (!settings.isBootEnforceConsumed() && clock.nowMs() < DUPLICATE_IGNITION_WINDOW_MS) {
+            lastIgnitionMs = clock.nowMs();
+        }
+        transitionTo(State.CONNECTING);
+    }
+
+    /**
+     * Begins at CONNECTING when started by a boot-bound component (e.g. AccessibilityService).
+     * Marks the boot session active when Once-on-Start has not yet been consumed so a trailing
+     * boot broadcast seconds later does not restart discovery, even on a slow cold boot (>30 s).
+     */
+    public void onBootStart() {
+        if (destroyed) return;
+        if (!settings.isBootEnforceConsumed()) {
+            lastIgnitionMs = clock.nowMs();
+        }
         transitionTo(State.CONNECTING);
     }
 
@@ -146,10 +166,42 @@ public final class Engine {
     /** Called on vehicle boot/ignition broadcast to start fresh for the new trip. */
     public void onIgnitionCycle() {
         if (destroyed) return;
+        long now = clock.nowMs();
+        if (SettingsRules.isDuplicateBootSignal(lastIgnitionMs, now)) {
+            log.d("IGNITION CYCLE: duplicate boot signal after " + (now - lastIgnitionMs) + " ms - ignored");
+            return;
+        }
+        lastIgnitionMs = now;
         log.d("IGNITION CYCLE: resetting Once-on-Start state and restarting discovery");
         settings.setBootEnforceConsumed(false);
         steadyOnCount = 0;
+        steadyHealthyReads = 0;
+        enforceRetries = 0;
+        degradedBackoffMs = DEGRADED_MIN_BACKOFF_MS;
+        writeFailures = 0;
+        faultCount = 0;
+        authFailCount = 0;
+        nextConnectDelayMs = 0;
+        nextTickDelayMs = 0;
         transitionTo(State.CONNECTING);
+    }
+
+    /**
+     * Called after "Grant Permission" succeeds so the engine wakes immediately instead of remaining
+     * asleep in an AUTH_FAIL or DEGRADED backoff for up to 5 minutes.
+     */
+    public void onPermissionGranted() {
+        if (destroyed) return;
+        authFailCount = 0;
+        if (state == State.CONNECTING || state == State.DEGRADED_RECOVERY) {
+            log.d("PERMISSION GRANTED: waking engine from " + state.name());
+            faultCount = 0;
+            writeFailures = 0;
+            degradedBackoffMs = DEGRADED_MIN_BACKOFF_MS;
+            nextConnectDelayMs = 0;
+            nextTickDelayMs = 0;
+            transitionTo(State.CONNECTING);
+        }
     }
 
     /** Latest published snapshot. Any thread. */
@@ -411,7 +463,6 @@ public final class Engine {
             int mode = settings.mode();
             if (mode != Mode.ONCE_ON_START && mode != Mode.AUTO_DISABLE) {
                 log.w("ENFORCING_BOOT_EARLY: mode is now " + mode + " - write cancelled");
-                if (settings.mode() == Mode.ONCE_ON_START) settings.setBootEnforceConsumed(true);
                 transitionTo(State.STEADY);
                 return;
             }

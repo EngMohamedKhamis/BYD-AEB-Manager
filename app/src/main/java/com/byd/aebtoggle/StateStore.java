@@ -2,6 +2,7 @@ package com.byd.aebtoggle;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.byd.aebtoggle.core.Engine;
 import com.byd.aebtoggle.core.EventLog;
@@ -47,6 +48,7 @@ final class StateStore {
     // guarded by StateStore.class
     private static Engine engine;
     private static Handler engineHandler;
+    private static long attachedAtElapsedMs = -1L;
 
     private StateStore() {
     }
@@ -85,6 +87,7 @@ final class StateStore {
     static synchronized void attach(Engine e, Handler handler) {
         engine = e;
         engineHandler = handler;
+        attachedAtElapsedMs = SystemClock.elapsedRealtime();
     }
 
     /** Called by AebService after engine.stop(); ignores an engine that is no longer the current one. */
@@ -92,7 +95,47 @@ final class StateStore {
         if (engine == e) {
             engine = null;
             engineHandler = null;
+            attachedAtElapsedMs = -1L;
         }
+    }
+
+    /** SystemClock.elapsedRealtime() when the active AebService engine attached, or -1 if none is running. */
+    static synchronized long engineAttachedAtElapsedMs() {
+        return (engine != null && engineHandler != null) ? attachedAtElapsedMs : -1L;
+    }
+
+    /** Dispatches an ignition cycle directly to an already-running Engine (e.g. if background FGS start threw). */
+    static boolean notifyIgnitionCycle() {
+        final Engine e;
+        final Handler h;
+        synchronized (StateStore.class) {
+            e = engine;
+            h = engineHandler;
+        }
+        if (e == null || h == null) return false;
+        return h.post(new Runnable() {
+            @Override
+            public void run() {
+                e.onIgnitionCycle();
+            }
+        });
+    }
+
+    /** Wakes the engine out of AUTH_FAIL / DEGRADED backoff immediately after "Grant Permission" succeeds. */
+    static boolean notifyPermissionGranted() {
+        final Engine e;
+        final Handler h;
+        synchronized (StateStore.class) {
+            e = engine;
+            h = engineHandler;
+        }
+        if (e == null || h == null) return false;
+        return h.post(new Runnable() {
+            @Override
+            public void run() {
+                e.onPermissionGranted();
+            }
+        });
     }
 
     /**

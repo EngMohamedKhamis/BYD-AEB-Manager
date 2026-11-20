@@ -13,12 +13,12 @@
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify_apks.ps1 `
-     -Apk AEB_Manager_v1.2_COMMUNITY.apk,BYD_AEB_Controller_v18.22_PERSONAL.apk `
-     -ExpectedVersionCode 19000 -ExpectedVersionName 19.0
+     -Apk AEB_Manager_v2.0.apk `
+     -ExpectedVersionCode 19000 -ExpectedVersionName 2.0
 #>
 param(
     [Parameter(Mandatory = $true)][string[]]$Apk,
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot = '',
     [string]$SdkDir = '',
     [string]$ExpectedVersionCode = '',
     [string]$ExpectedVersionName = ''
@@ -26,6 +26,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+if (-not $ProjectRoot) {
+    $ProjectRoot = Split-Path -Parent $scriptDir
+}
 
 # "powershell -File ... -Apk a.apk,b.apk" delivers ONE string "a.apk,b.apk"; split it back into a list.
 $Apk = @($Apk | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -90,7 +95,7 @@ foreach ($a in $Apk) {
     $shaLine = $out | Where-Object { $_ -match 'certificate SHA-256 digest' } | Select-Object -First 1
     $signer = ''
     if ($shaLine) { $hexRaw = ($shaLine -replace '.*digest:\s*', '').Trim().ToUpper(); $signer = (($hexRaw -split '(?<=\G..)(?!$)') -join ':') }
-    $hasOfficialVault = (Test-Path (Join-Path $ProjectRoot 'app/community-vault.jks')) -or (Test-Path (Join-Path $ProjectRoot 'community-vault.jks'))
+    $hasOfficialVault = Test-Path (Join-Path $ProjectRoot 'app/community-vault.jks')
     if ($hasOfficialVault) {
         Check ($signer -ne '' -and ($KNOWN_SIGNERS -contains $signer)) ("signer certificate matches official release key ($signer)")
     } else {

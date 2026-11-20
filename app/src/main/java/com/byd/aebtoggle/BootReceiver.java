@@ -3,34 +3,30 @@ package com.byd.aebtoggle;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.SystemClock;
 import android.util.Log;
 
+import com.byd.aebtoggle.core.SettingsRules;
+
 public class BootReceiver extends BroadcastReceiver {
+    private static volatile long lastOfflineBootElapsedMs = -1L;
+
     @Override
     public void onReceive(Context context, Intent intent) {
-        String action = intent.getAction();
-        if (action == null) return;
-        
-        // v18.10 Hardening: Only respond to legitimate boot actions
-        boolean isBoot = Intent.ACTION_BOOT_COMPLETED.equals(action) ||
-                        Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(action) ||
-                        "android.intent.action.QUICKBOOT_POWERON".equals(action) ||
-                        "com.htc.intent.action.QUICKBOOT_POWERON".equals(action);
-                        
-        if (!isBoot) {
-            Log.w("BYDAebToggle", "Ignoring invalid broadcast action: " + action);
+        String action = intent == null ? null : intent.getAction();
+        if (!SettingsRules.isBootBroadcastAction(action)) {
+            if (action != null) {
+                Log.w("BYDAebToggle", "Ignoring invalid broadcast action: " + action);
+            }
             return;
         }
 
         Log.i("BYDAebToggle", "Confirmed Boot Broadcast: " + action);
-        
-        AebSettings settings = new AebSettings(context);
-        settings.setBootEnforceConsumed(false); // Reset Once-on-Start consumption on every new vehicle start
-        Log.i("BYDAebToggle", "Reset Once-on-Start consumed state for new vehicle ignition");
 
+        AebSettings settings = new AebSettings(context);
         boolean startOnBoot = settings.startOnBoot(); // Default to true
         StateStore.event("boot broadcast " + action + ", auto-start " + (startOnBoot ? "on" : "off"));
-        
+
         if (startOnBoot) {
             try {
                 Intent serviceIntent = new Intent(context, AebService.class);
@@ -38,6 +34,28 @@ public class BootReceiver extends BroadcastReceiver {
                 context.startForegroundService(serviceIntent); // minSdk 31
             } catch (Exception e) {
                 Log.e("BYDAebToggle", "Failed to start AebService on boot: " + e.getMessage());
+                if (!StateStore.notifyIgnitionCycle()) {
+                    long now = SystemClock.elapsedRealtime();
+                    long attachedAt = StateStore.engineAttachedAtElapsedMs();
+                    if (SettingsRules.shouldResetOfflineBoot(attachedAt, lastOfflineBootElapsedMs, now)) {
+                        lastOfflineBootElapsedMs = now;
+                        settings.setBootEnforceConsumed(false);
+                    }
+                }
+            }
+        } else {
+            long now = SystemClock.elapsedRealtime();
+            long attachedAt = StateStore.engineAttachedAtElapsedMs();
+            if (SettingsRules.shouldResetOfflineBoot(attachedAt, lastOfflineBootElapsedMs, now)) {
+                lastOfflineBootElapsedMs = now;
+                if (attachedAt >= 0L) {
+                    try {
+                        context.stopService(new Intent(context, AebService.class));
+                    } catch (Exception ignored) {
+                    }
+                }
+                settings.setBootEnforceConsumed(false);
+                Log.i("BYDAebToggle", "Reset Once-on-Start consumed state for new ignition (auto-start off)");
             }
         }
     }

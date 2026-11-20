@@ -29,8 +29,11 @@ import com.byd.aebtoggle.core.Snapshot;
 import com.byd.aebtoggle.core.StatusView;
 
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends Activity {
+
+    private static final AtomicBoolean GRANT_IN_FLIGHT = new AtomicBoolean(false);
 
     private TextView tvStatus;
     private View vStatusDot;
@@ -142,11 +145,26 @@ public class MainActivity extends Activity {
         cbStartOnBoot.setOnClickListener(settingsListener);
         cbFloating.setOnClickListener(v -> {
             if (cbFloating.isChecked() && !Settings.canDrawOverlays(this)) {
+                if (!GRANT_IN_FLIGHT.compareAndSet(false, true)) {
+                    cbFloating.setChecked(settings.showFloating());
+                    return;
+                }
+                updateUIStates();
                 Toast.makeText(this, R.string.toast_granting_hud, Toast.LENGTH_SHORT).show();
                 new Thread(() -> {
-                    AdbHelper.grantSelfPermissions();
+                    boolean authorized = false;
+                    try {
+                        authorized = AdbHelper.grantSelfPermissions();
+                    } finally {
+                        GRANT_IN_FLIGHT.set(false);
+                    }
+                    final boolean authResult = authorized;
                     runOnUiThread(() -> {
+                        if (authResult) {
+                            StateStore.notifyPermissionGranted();
+                        }
                         if (isFinishing() || isDestroyed()) return;
+                        updateUIStates();
                         // Poll for up to 5 s (same as triggerGrantPermission)
                         final int[] attempts = {0};
                         final Handler h = new Handler(Looper.getMainLooper());
@@ -189,20 +207,33 @@ public class MainActivity extends Activity {
     }
 
     private void triggerGrantPermission() {
-        if (btnGrant != null) btnGrant.setEnabled(false);
+        if (!GRANT_IN_FLIGHT.compareAndSet(false, true)) {
+            return;
+        }
+        updateUIStates();
         Toast.makeText(this, R.string.toast_granting, Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             // S6: one result per capability (same commands as before), logged and shown as a checklist
             final ProvisioningReport report = new ProvisioningReport();
-            boolean authorized = AdbHelper.grantSelfPermissions(report);
-            boolean allDelivered = report.allDelivered();
-            StateStore.event("grant permission: " + (authorized ? "car accepted the key" : "not authorized"));
-            for (String line : report.lines()) StateStore.event("grant: " + line);
+            boolean authorized = false;
+            boolean allDelivered = false;
+            try {
+                authorized = AdbHelper.grantSelfPermissions(report);
+                allDelivered = report.allDelivered();
+                StateStore.event("grant permission: " + (authorized ? "car accepted the key" : "not authorized"));
+                for (String line : report.lines()) StateStore.event("grant: " + line);
+            } finally {
+                GRANT_IN_FLIGHT.set(false);
+            }
+            final boolean authResult = authorized;
+            final boolean allOk = allDelivered;
             runOnUiThread(() -> {
-                if (btnGrant != null) btnGrant.setEnabled(true);
+                if (authResult) {
+                    StateStore.notifyPermissionGranted();
+                }
                 if (isFinishing() || isDestroyed()) return;
-                if (authorized) {
-                    if (allDelivered) {
+                if (authResult) {
+                    if (allOk) {
                         Toast.makeText(this, R.string.toast_granted, Toast.LENGTH_SHORT).show();
                     }
                     syncService();
@@ -311,6 +342,17 @@ public class MainActivity extends Activity {
             btnGrant.setAlpha(0.5f);
             btnGrant.setEnabled(true);
             btnGrant.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getColor(R.color.grant_idle)));
+        }
+
+        boolean grantBusy = GRANT_IN_FLIGHT.get();
+        if (btnGrant != null) {
+            btnGrant.setEnabled(!grantBusy);
+        }
+        if (cbFloating != null) {
+            cbFloating.setEnabled(!grantBusy);
+            if (cbFloating.getParent() instanceof View) {
+                ((View) cbFloating.getParent()).setEnabled(!grantBusy);
+            }
         }
     }
 
@@ -534,7 +576,9 @@ public class MainActivity extends Activity {
             for (int i = 0; i < group.getChildCount(); i++) {
                 View child = group.getChildAt(i);
                 if (child instanceof CheckBox) {
-                    child.performClick();
+                    if (child.isEnabled()) {
+                        child.performClick();
+                    }
                     break;
                 }
             }

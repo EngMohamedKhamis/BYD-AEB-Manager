@@ -37,10 +37,12 @@ public class AebService extends Service {
     private static final String TAG = "AebService";
     private static final String CHANNEL_ID = "AebServiceChannel";
     public static final String EXTRA_IGNITION_CYCLE = "is_ignition_cycle";
+    public static final String EXTRA_BOOT_START = "is_boot_start";
 
     private HandlerThread engineThread;
     private Handler engineHandler;
     private Engine engine;
+    private boolean engineStarted = false;
     private HudController hud;
 
     // =========================================================================
@@ -69,16 +71,26 @@ public class AebService extends Service {
         engine = new Engine(new AdbVehicleLink(), new AndroidClock(), new HandlerScheduler(engineHandler),
                 new AebSettings(this), StateStore::publish, new EngineLogAdapter(TAG));
         StateStore.attach(engine, engineHandler); // "Disable AEB Now" runs on this engine's thread
-        // H04: every state transition runs on the single engine thread, including the first one.
-        engineHandler.post(engine::start);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(1, createNotification());
-        if (intent != null && intent.getBooleanExtra(EXTRA_IGNITION_CYCLE, false)) {
-            new AebSettings(this).setBootEnforceConsumed(false);
-            if (engine != null && engineHandler != null) {
+        boolean isIgnition = intent != null && intent.getBooleanExtra(EXTRA_IGNITION_CYCLE, false);
+        boolean isBootStart = intent != null && intent.getBooleanExtra(EXTRA_BOOT_START, false);
+        if (engine != null && engineHandler != null) {
+            // H04: every state transition runs on the single engine thread, including the first one.
+            // Engine deduplicates repeated boot signals within the same boot session.
+            if (!engineStarted) {
+                engineStarted = true;
+                if (isIgnition) {
+                    engineHandler.post(engine::onIgnitionCycle);
+                } else if (isBootStart) {
+                    engineHandler.post(engine::onBootStart);
+                } else {
+                    engineHandler.post(engine::start);
+                }
+            } else if (isIgnition) {
                 engineHandler.post(engine::onIgnitionCycle);
             }
         }

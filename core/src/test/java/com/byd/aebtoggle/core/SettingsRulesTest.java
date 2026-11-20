@@ -54,5 +54,28 @@ final class SettingsRulesTest {
         T.eq("disable_aeb wrong type (old default true), old 0 = Once on Start", Integer.valueOf(1), Integer.valueOf(SettingsRules.migrateLegacy("x", Integer.valueOf(0))));
         T.eq("disable_aeb missing, old 0 = Once on Start", Integer.valueOf(1), Integer.valueOf(SettingsRules.migrateLegacy(null, Integer.valueOf(0))));
         T.eq("both missing = Auto Disable", Integer.valueOf(2), Integer.valueOf(SettingsRules.migrateLegacy(null, null)));
+
+        T.section("SettingsRules: boot broadcast & duplicate boot signal rules");
+        T.isTrue("BOOT_COMPLETED accepted", SettingsRules.isBootBroadcastAction("android.intent.action.BOOT_COMPLETED"));
+        T.isTrue("LOCKED_BOOT_COMPLETED accepted", SettingsRules.isBootBroadcastAction("android.intent.action.LOCKED_BOOT_COMPLETED"));
+        T.isTrue("QUICKBOOT_POWERON accepted", SettingsRules.isBootBroadcastAction("android.intent.action.QUICKBOOT_POWERON"));
+        T.isTrue("HTC QUICKBOOT_POWERON accepted", SettingsRules.isBootBroadcastAction("com.htc.intent.action.QUICKBOOT_POWERON"));
+        T.isTrue("null rejected", !SettingsRules.isBootBroadcastAction(null));
+        T.isTrue("arbitrary action rejected", !SettingsRules.isBootBroadcastAction("android.intent.action.SCREEN_ON"));
+        T.isTrue("no prior signal (-1) is not duplicate", !SettingsRules.isDuplicateBootSignal(-1L, 0L));
+        T.isTrue("same instant (0 ms) is duplicate", SettingsRules.isDuplicateBootSignal(0L, 0L));
+        T.isTrue("just inside window (29999 ms) is duplicate", SettingsRules.isDuplicateBootSignal(1000L, 30999L));
+        T.isTrue("at window boundary (30000 ms) is accepted", !SettingsRules.isDuplicateBootSignal(1000L, 31000L));
+        T.isTrue("clock rollback is not locked out", !SettingsRules.isDuplicateBootSignal(5000L, 4000L));
+        T.isTrue("offline boot: no attached engine and no prior signal -> reset",
+                SettingsRules.shouldResetOfflineBoot(-1L, -1L, 15_000L));
+        T.isTrue("offline boot: duplicate broadcast 3 s later -> ignored",
+                !SettingsRules.shouldResetOfflineBoot(-1L, 15_000L, 18_000L));
+        T.isTrue("offline boot: user started engine 12 s ago on cold boot -> ignored",
+                !SettingsRules.shouldResetOfflineBoot(8_000L, -1L, 20_000L));
+        T.isTrue("offline boot: leftover engine from prior trip (1 hr ago) -> reset",
+                SettingsRules.shouldResetOfflineBoot(100_000L, -1L, 3_700_000L));
+        T.isTrue("offline boot: engine attached exactly 30 s ago -> reset",
+                SettingsRules.shouldResetOfflineBoot(1_000L, -1L, 31_000L));
     }
 }

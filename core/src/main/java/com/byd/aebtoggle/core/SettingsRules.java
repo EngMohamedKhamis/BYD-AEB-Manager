@@ -54,4 +54,30 @@ public final class SettingsRules {
         if (old == 0) return Mode.ONCE_ON_START;
         return Mode.AUTO_DISABLE;
     }
+
+    /** Legitimate system / vendor boot broadcast actions accepted by BootReceiver (v18.10 hardening). */
+    public static boolean isBootBroadcastAction(String action) {
+        return "android.intent.action.BOOT_COMPLETED".equals(action)
+                || "android.intent.action.LOCKED_BOOT_COMPLETED".equals(action)
+                || "android.intent.action.QUICKBOOT_POWERON".equals(action)
+                || "com.htc.intent.action.QUICKBOOT_POWERON".equals(action);
+    }
+
+    /** True when a boot/ignition signal arrives within DUPLICATE_IGNITION_WINDOW_MS of an active session. */
+    public static boolean isDuplicateBootSignal(long lastSignalMs, long nowMs) {
+        return lastSignalMs >= 0 && nowMs >= lastSignalMs
+                && (nowMs - lastSignalMs) < Engine.DUPLICATE_IGNITION_WINDOW_MS;
+    }
+
+    /**
+     * True when a boot/ignition broadcast received while Start-on-Boot is OFF (or when starting
+     * AebService threw with no attached engine) represents a genuine new trip rather than:
+     *  - a duplicate broadcast within DUPLICATE_IGNITION_WINDOW_MS of a just-handled offline boot, or
+     *  - a delayed cold-boot broadcast arriving within DUPLICATE_IGNITION_WINDOW_MS of an engine
+     *    already started manually in this boot session.
+     */
+    public static boolean shouldResetOfflineBoot(long engineAttachedAtMs, long lastOfflineBootMs, long nowMs) {
+        return !isDuplicateBootSignal(engineAttachedAtMs, nowMs)
+                && !isDuplicateBootSignal(lastOfflineBootMs, nowMs);
+    }
 }

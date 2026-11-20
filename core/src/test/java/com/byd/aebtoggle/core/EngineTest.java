@@ -73,6 +73,15 @@ final class EngineTest {
 
         T.section("Engine: a failing sink does not stop the engine");
         failingSink();
+
+        T.section("Engine: onIgnitionCycle resets consumed flag and all error/backoff counters");
+        ignitionCycleResetsConsumedAndCounters();
+
+        T.section("Engine: duplicate boot signals within boot session are ignored");
+        duplicateBootSignalsIgnored();
+
+        T.section("Engine: onPermissionGranted wakes 5-minute AUTH_FAIL backoff without disturbing healthy states");
+        permissionGrantedWakesBackoff();
     }
 
     // ------------------------------------------------------------------------------------------
@@ -280,7 +289,7 @@ final class EngineTest {
     }
 
     private static void modeChangedBeforeWrite() {
-        // boot: the decision sees mode 1, the write task sees mode 0 -> cancelled
+        // boot: DISCOVERING sees mode 1, ENFORCING_BOOT_EARLY sees mode 0 -> write cancelled, NOT marked consumed (1b6e5f4)
         Rig r = new Rig(Mode.ONCE_ON_START);
         r.settings.script.add(Integer.valueOf(Mode.ONCE_ON_START));
         r.settings.script.add(Integer.valueOf(Mode.NO_ACTION));
@@ -288,11 +297,22 @@ final class EngineTest {
         T.eq("no write", L(), r.link.writeTimes);
         T.isTrue("logged as cancelled", r.log.contains("write cancelled"));
         T.eq("STEADY", Engine.State.STEADY, r.engine.state());
-        // current behaviour (H05): the once-marker was consumed before dispatch, so it stays consumed
+        T.isTrue("once-marker not consumed when write was cancelled", !r.settings.isBootEnforceConsumed());
+
+        // If mode stays No Action across a reconnect, still no write
+        r.settings.mode = Mode.NO_ACTION;
         r.link.scriptedReads.add(ReadResult.failed(LinkStatus.TIMEOUT));
         r.link.aebOn = true;
-        r.run(80000);
-        T.eq("a later reconnect in mode 1 does not write (marker consumed)", L(), r.link.writeTimes);
+        r.run(60000);
+        T.eq("reconnect in No Action does not write", L(), r.link.writeTimes);
+
+        // If mode is Once on Start on a subsequent reconnect (since Once on Start never fired), it enforces once and consumes
+        // (36000 fail -> 42000 STEADY -> ticks 42000, 52000, 62000 fail -> discovery 62000, 65000, 68000 write)
+        r.settings.mode = Mode.ONCE_ON_START;
+        r.link.scriptedReads.add(ReadResult.failed(LinkStatus.TIMEOUT));
+        r.run(100000);
+        T.eq("reconnect in mode 1 writes once because prior attempt was cancelled", L(68000), r.link.writeTimes);
+        T.isTrue("marker consumed after verified boot write", r.settings.isBootEnforceConsumed());
 
         // runtime: STEADY sees mode 2 (second ON read), the recovery task sees mode 1 -> cancelled
         Rig q = new Rig(Mode.AUTO_DISABLE).start();
@@ -459,5 +479,182 @@ final class EngineTest {
         T.eq("write times unchanged", L(6000), r.link.writeTimes);
         T.eq("STEADY", Engine.State.STEADY, r.engine.state());
         T.isTrue("logged", r.log.contains("snapshot sink failed"));
+    }
+
+    private static void ignitionCycleResetsConsumedAndCounters() {
+        // 1. Once-on-Start resets and enforces again on a new vehicle ignition cycle
+        Rig r = new Rig(Mode.ONCE_ON_START).start();
+        r.run(40000);
+        T.eq("trip 1 write", L(6000), r.link.writeTimes);
+        T.isTrue("trip 1 consumed", r.settings.isBootEnforceConsumed());
+        r.link.aebOn = true;
+        r.run(60000);
+        T.eq("no second write during trip 1", L(6000), r.link.writeTimes);
+
+        r.engine.onIgnitionCycle();
+        T.isTrue("consumed cleared on ignition", !r.settings.isBootEnforceConsumed());
+        T.eq("restarts at CONNECTING", Engine.State.CONNECTING, r.engine.state());
+        r.run(100000);
+        T.eq("trip 2 write after fresh discovery", L(6000, 66000), r.link.writeTimes);
+        T.isTrue("trip 2 consumed after verification", r.settings.isBootEnforceConsumed());
+        T.eq("trip 2 STEADY", Engine.State.STEADY, r.engine.state());
+
+        // 2. degradedBackoffMs resets to 30 s floor on new ignition
+        Rig d = new Rig(Mode.AUTO_DISABLE);
+        d.link.writesTakeEffect = false;
+        d.start().run(60000); // 1st DEGRADED (30s) at 9000..39000, 2nd DEGRADED (60s) at 48000..108000
+        T.eq("degraded backoff grew to 60s on trip 1", "DEGRADED (60s)", d.engine.snapshot().phase);
+        d.engine.onIgnitionCycle();
+        d.run(70000); // discovery 60000..66000, writes 66000/67000/68000, DEGRADED at 69000
+        T.eq("trip 2 DEGRADED starts back at 30s floor", "DEGRADED (30s)", d.engine.snapshot().phase);
+
+        // 3. writeFailures resets to 0 on new ignition (2 failures on trip 1 + 2 failures on trip 2 must not degrade)
+        Rig w = new Rig(Mode.AUTO_DISABLE);
+        w.link.scriptedWrites.add(WriteResult.of(LinkStatus.ERROR));
+        w.link.scriptedWrites.add(WriteResult.of(LinkStatus.ERROR));
+        w.start().run(14000); // failed writes at 6000 and 12000 -> writeFailures == 2
+        w.settings.mode = Mode.NO_ACTION;
+        w.run(50000); // sit in STEADY without writing so writeFailures stays 2
+        w.settings.mode = Mode.AUTO_DISABLE;
+        w.link.scriptedWrites.add(WriteResult.of(LinkStatus.ERROR));
+        w.link.scriptedWrites.add(WriteResult.of(LinkStatus.ERROR));
+        w.engine.onIgnitionCycle();
+        w.run(95000); // failed writes at 56000 and 62000, 3rd write at 68000 succeeds -> STEADY
+        T.eq("trip 2 tolerated 2 write failures without degrading", 0, w.sink.phasesStartingWith("DEGRADED").size());
+        T.eq("trip 2 succeeded on 3rd attempt", L(6000, 12000, 56000, 62000, 68000), w.link.writeTimes);
+        T.eq("trip 2 reached STEADY", Engine.State.STEADY, w.engine.state());
+
+        // 4. faultCount resets to 0 on new ignition (next fault pauses 4 s, not 60 s)
+        Rig f = new Rig(Mode.NO_ACTION);
+        f.link.readThrowsLeft = 4; // pauses 4s (4000), 8s (12000), 16s (28000), 32s (60000)
+        f.start().run(50000);
+        f.link.readThrowsLeft = 1;
+        f.engine.onIgnitionCycle();
+        f.run(55000); // fault at 50000 -> 4s pause -> reconnect read at 54000
+        T.isTrue("fault after ignition paused 4s (read at 54000)", f.link.readTimes.contains(Long.valueOf(54000)));
+
+        // 5. authFailCount resets to 0 on new ignition (next AUTH_FAIL waits 3 s, not 300 s)
+        Rig a = new Rig(Mode.NO_ACTION);
+        a.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // 0 -> +3s
+        a.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // 3000 -> +15s
+        a.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // 18000 -> +60s (78000)
+        a.start().run(50000);
+        a.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // at 50000 -> should wait 3s (53000)
+        a.engine.onIgnitionCycle();
+        a.run(53000);
+        T.eq("auth backoff reset to 3s on ignition", Engine.State.DISCOVERING, a.engine.state());
+    }
+
+    private static void duplicateBootSignalsIgnored() {
+        // 1. Cold boot started via start() (e.g. AccessibilityService), then BootReceiver fires seconds later
+        Rig r = new Rig(Mode.ONCE_ON_START).start();
+        r.run(4000); // mid-DISCOVERING (reads at 0, 3000)
+        r.engine.onIgnitionCycle(); // duplicate signal 4 s into boot
+        r.run(18000); // write at 6000, verified OFF by 16000 -> consumed == true
+        T.eq("discovery not restarted by 4s boot broadcast", L(6000), r.link.writeTimes);
+        T.isTrue("consumed after verify", r.settings.isBootEnforceConsumed());
+
+        r.link.aebOn = true; // driver re-enables AEB at 18 s
+        r.engine.onIgnitionCycle(); // late QUICKBOOT_POWERON 18 s into same boot
+        T.isTrue("late duplicate broadcast did not clear consumed", r.settings.isBootEnforceConsumed());
+        r.run(40000);
+        T.eq("still only one boot write", L(6000), r.link.writeTimes);
+        T.isTrue("logged duplicate", r.log.contains("duplicate boot signal"));
+
+        // 2. Back-to-back BOOT_COMPLETED + QUICKBOOT_POWERON on a warm ignition cycle
+        r.engine.onIgnitionCycle(); // genuine new trip at t = 40000 (>= 30 s)
+        T.isTrue("genuine trip cleared consumed", !r.settings.isBootEnforceConsumed());
+        r.run(43500);
+        r.engine.onIgnitionCycle(); // duplicate QUICKBOOT_POWERON 3.5 s later
+        r.run(58000); // write at 46000, verified OFF at 56000 -> consumed == true
+        r.link.aebOn = true;
+        r.engine.onIgnitionCycle(); // another duplicate 18 s after trip 2 start
+        T.isTrue("trip 2 consumed preserved against duplicate", r.settings.isBootEnforceConsumed());
+        r.run(75000);
+        T.eq("exactly one write per real trip", L(6000, 46000), r.link.writeTimes);
+
+        // 3. Dead-process warm wake: Accessibility recreated service via onBootStart() with consumed=true, then BootReceiver fires 2 s later
+        Rig warm = new Rig(Mode.ONCE_ON_START);
+        warm.clock.now = 3_600_000;
+        warm.settings.setBootEnforceConsumed(true);
+        warm.engine.onBootStart();
+        warm.run(3_602_000); // onBootStart() saw consumed=true, so no active unconsumed boot session yet
+        warm.engine.onIgnitionCycle(); // first real ignition broadcast of new trip at t = 3602000 -> MUST be accepted
+        T.isTrue("warm wake ignition accepted despite recent recreation", !warm.settings.isBootEnforceConsumed());
+        warm.run(3_605_000);
+        warm.engine.onIgnitionCycle(); // second broadcast 3 s later -> duplicate, ignored
+        warm.run(3_635_000);
+        T.eq("warm wake wrote at 3602000 + 6000 = 3608000", L(3_608_000), warm.link.writeTimes);
+        T.isTrue("warm wake marked consumed", warm.settings.isBootEnforceConsumed());
+
+        // 4. Slow cold boot (>30 s uptime) started via onBootStart() (AccessibilityService) still suppresses trailing BootReceiver
+        Rig slowBoot = new Rig(Mode.ONCE_ON_START);
+        slowBoot.clock.now = 45_000;
+        slowBoot.engine.onBootStart();
+        slowBoot.run(52_000); // write at 51000, now in VERIFYING_BOOT
+        slowBoot.engine.onIgnitionCycle(); // trailing BOOT_COMPLETED 7 s after Accessibility bind -> ignored
+        slowBoot.run(75_000);
+        T.eq("slow cold boot wrote only once", L(51_000), slowBoot.link.writeTimes);
+        T.isTrue("slow cold boot marked consumed", slowBoot.settings.isBootEnforceConsumed());
+
+        // 5. Mid-uptime UI launch (e.g. MainActivity.syncService at 500 s) must NOT suppress a real ignition broadcast 20 s later
+        Rig ui = new Rig(Mode.ONCE_ON_START);
+        ui.clock.now = 500_000;
+        ui.start().run(520_000); // write at 506000, verified OFF by 516000 -> consumed == true
+        T.eq("UI launch trip 1 write", L(506000), ui.link.writeTimes);
+        T.isTrue("UI launch trip 1 consumed", ui.settings.isBootEnforceConsumed());
+        ui.link.aebOn = true;
+        ui.engine.onIgnitionCycle(); // real ignition broadcast 20 s after UI launch -> MUST NOT be suppressed
+        T.isTrue("real ignition after mid-uptime UI launch cleared consumed", !ui.settings.isBootEnforceConsumed());
+        ui.run(550_000);
+        T.eq("real ignition enforced on trip 2", L(506000, 526000), ui.link.writeTimes);
+
+        // 6. After stop(), onIgnitionCycle() and onBootStart() are no-ops
+        warm.engine.stop();
+        warm.engine.onIgnitionCycle();
+        warm.engine.onBootStart();
+        T.eq("still STOPPED", "STOPPED", warm.sink.last().phase);
+        T.eq("nothing scheduled after stop", 0, warm.sched.pending());
+    }
+
+    private static void permissionGrantedWakesBackoff() {
+        // 1. Wakes 300 s AUTH_FAIL backoff immediately on Grant Permission success
+        Rig r = new Rig(Mode.ONCE_ON_START);
+        r.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // 0 -> +3s
+        r.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // 3000 -> +15s
+        r.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // 18000 -> +60s
+        r.link.scriptedReads.add(ReadResult.failed(LinkStatus.AUTH_FAIL)); // 78000 -> +300s (until 378000)
+        r.start().run(80000);
+        T.eq("stuck in AUTH_FAIL at 80 s", LinkStatus.AUTH_FAIL, r.engine.snapshot().link);
+        T.eq("still CONNECTING", Engine.State.CONNECTING, r.engine.state());
+
+        r.engine.onPermissionGranted();
+        r.run(80000); // immediate 0 ms tick
+        T.eq("woke immediately at 80 s into DISCOVERING", Engine.State.DISCOVERING, r.engine.state());
+        T.eq("link is now SUCCESS without waiting 300 s", LinkStatus.SUCCESS, r.engine.snapshot().link);
+        r.run(115000);
+        T.eq("completed boot disable at 86000", L(86000), r.link.writeTimes);
+        T.eq("reached STEADY", Engine.State.STEADY, r.engine.state());
+
+        // 2. Re-running Grant Permission while already healthy in STEADY does not disrupt STEADY
+        int readsBefore = r.link.readTimes.size();
+        r.engine.onPermissionGranted();
+        T.eq("stayed STEADY", Engine.State.STEADY, r.engine.state());
+        T.eq("no immediate extra read in STEADY", readsBefore, r.link.readTimes.size());
+
+        // 3. Wakes DEGRADED_RECOVERY backoff too
+        Rig deg = new Rig(Mode.AUTO_DISABLE);
+        for (int i = 0; i < 3; i++) deg.link.scriptedWrites.add(WriteResult.of(LinkStatus.AUTH_FAIL));
+        deg.start().run(18000);
+        T.eq("in DEGRADED_RECOVERY", Engine.State.DEGRADED_RECOVERY, deg.engine.state());
+        deg.engine.onPermissionGranted();
+        deg.run(18000);
+        T.eq("woke from DEGRADED_RECOVERY into DISCOVERING", Engine.State.DISCOVERING, deg.engine.state());
+
+        // 4. After stop(), onPermissionGranted() is a no-op
+        deg.engine.stop();
+        deg.engine.onPermissionGranted();
+        T.eq("still STOPPED", "STOPPED", deg.sink.last().phase);
+        T.eq("nothing scheduled after stop", 0, deg.sched.pending());
     }
 }
